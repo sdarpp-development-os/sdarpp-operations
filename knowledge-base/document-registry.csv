@@ -1,0 +1,11 @@
+project_id,folder_path,filename,document_type,version,date_modified,status
+SYS,knowledge-base/ndis-sda-design-standard,SDA_Design_Standard_2021_Summary.md,regulatory,1.0,2026-04-05,current
+SYS,knowledge-base/state-planning/NSW,NSW_Planning_Controls_Summary.md,regulatory,1.0,2026-04-05,current
+SYS,knowledge-base/state-planning/VIC,VIC_Planning_Controls_Summary.md,regulatory,1.0,2026-04-05,current
+SYS,knowledge-base/state-planning/WA,WA_Planning_Controls_Summary.md,regulatory,1.0,2026-04-05,current
+SYS,knowledge-base/state-planning/SA,SA_Planning_Controls_Summary.md,regulatory,1.0,2026-04-05,current
+SYS,templates/agent-prompts,compliance-check-prompt.md,template,1.0,2026-04-05,current
+SYS,templates/agent-prompts,feasibility-analysis-prompt.md,template,1.0,2026-04-05,current
+SYS,templates/governance,risk-register-template.md,template,1.0,2026-04-05,current
+SYS,templates/governance,decision-log-template.md,template,1.0,2026-04-05,current
+SYS,compliance-register,ndis-sda-compliance-matrix.md,compliance,1.0,2026-04-05,current

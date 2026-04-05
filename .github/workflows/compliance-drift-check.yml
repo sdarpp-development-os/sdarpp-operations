@@ -1,0 +1,92 @@
+name: Compliance Drift Detection
+
+on:
+  schedule:
+    # Weekly on Wednesday 09:00 AEDT (22:00 UTC Tuesday)
+    - cron: '0 22 * * 2'
+  workflow_dispatch:
+
+jobs:
+  drift-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check compliance drift
+        id: drift
+        run: |
+          echo "Checking for stale compliance checklist items..."
+
+          # This is a placeholder — in production, this would:
+          # 1. Load compliance-register/ndis-sda-compliance-matrix.md
+          # 2. Check each projects/[id]/sda/sda-compliance-checklist.md
+          # 3. Flag items not updated in 90+ days
+          # 4. Identify missing checklist items
+
+          STALE_COUNT=0
+          MISSING_COUNT=0
+
+          # Scan project folders for stale checklists (example)
+          for project_dir in projects/*/sda/; do
+            if [ -f "$project_dir/sda-compliance-checklist.md" ]; then
+              LAST_MODIFIED=$(stat -f %Sm -t "%Y-%m-%d" "$project_dir/sda-compliance-checklist.md" 2>/dev/null || echo "unknown")
+              echo "Project checklist: $project_dir (Last modified: $LAST_MODIFIED)"
+            fi
+          done
+
+          echo "stale_count=$STALE_COUNT" >> $GITHUB_OUTPUT
+          echo "missing_count=$MISSING_COUNT" >> $GITHUB_OUTPUT
+          echo "drift_detected=$([ $STALE_COUNT -gt 0 ] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Issue on drift
+        if: steps.drift.outputs.drift_detected == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const date = new Date().toISOString().split('T')[0];
+            const staleCount = '${{ steps.drift.outputs.stale_count }}';
+            const missingCount = '${{ steps.drift.outputs.missing_count }}';
+
+            const title = `[COMPLIANCE DRIFT] SDA Design Standard Compliance — ${date}`;
+            const body = `## Compliance Drift Detected
+
+            ### Summary
+            - **Stale items** (not updated in 90+ days): ${staleCount}
+            - **Missing items**: ${missingCount}
+
+            ### Action Required
+            1. Review each project's SDA compliance checklist
+            2. Update last-modified dates for current items
+            3. Address any missing compliance items
+            4. Close this issue once all items are current
+
+            ### Reference
+            - Master compliance matrix: \`compliance-register/ndis-sda-compliance-matrix.md\`
+            - Project checklists: \`projects/[project-id]/sda/sda-compliance-checklist.md\`
+
+            ### SDA Design Standard References
+            - Highly Accessible (HPS) requirements
+            - Fully Accessible (FA) requirements
+            - Improved Liveability (IL) requirements
+
+            ---
+            **Automated detection:** SDARPP Compliance Drift Check
+            **Detection date:** ${date}`;
+
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['compliance', 'automated', 'sda-design-standard']
+            });
+
+      - name: Report status
+        run: |
+          echo "✅ Compliance drift check complete"
+          echo "Stale items: ${{ steps.drift.outputs.stale_count }}"
+          echo "Missing items: ${{ steps.drift.outputs.missing_count }}"

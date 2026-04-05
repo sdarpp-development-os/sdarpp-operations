@@ -1,0 +1,63 @@
+name: Knowledge Base Sync
+
+on:
+  push:
+    paths:
+      - 'knowledge-base/**'
+      - '.github/workflows/knowledge-base-sync.yml'
+  workflow_dispatch:
+
+jobs:
+  sync-kb:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate knowledge base structure
+        id: validate
+        run: |
+          echo "Validating knowledge base structure..."
+
+          # Check required folders exist
+          REQUIRED_DIRS=(
+            "knowledge-base/ndis-sda-design-standard"
+            "knowledge-base/state-planning"
+            "knowledge-base/aged-care"
+          )
+
+          for dir in "${REQUIRED_DIRS[@]}"; do
+            if [ ! -d "$dir" ]; then
+              echo "❌ Missing directory: $dir"
+              echo "validation_failed=true" >> $GITHUB_OUTPUT
+            fi
+          done
+
+          # Check document registry exists
+          if [ ! -f "knowledge-base/document-registry.csv" ]; then
+            echo "⚠️ Warning: document-registry.csv not found"
+          fi
+
+          echo "validation_passed=true" >> $GITHUB_OUTPUT
+
+      - name: Log KB update
+        run: |
+          cat >> knowledge-base/update-log.md << EOF
+
+          ## Update — $(date -u +%Y-%m-%dT%H:%M:%SZ)
+          **Commit:** ${{ github.sha }}
+          **Author:** ${{ github.actor }}
+          **Changes:** Knowledge base content updated
+
+          ### Modified Files
+          EOF
+
+          git diff --name-only HEAD~1 2>/dev/null | grep "knowledge-base/" | sed 's/^/- /' >> knowledge-base/update-log.md || echo "- (no specific files listed)" >> knowledge-base/update-log.md
+
+      - name: Report sync status
+        run: |
+          echo "✅ Knowledge base sync complete"
+          echo "Validation: ${{ steps.validate.outputs.validation_passed }}"

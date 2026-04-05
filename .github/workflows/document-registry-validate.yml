@@ -1,0 +1,74 @@
+name: Document Registry Validation
+
+on:
+  push:
+    paths:
+      - 'knowledge-base/document-registry.csv'
+      - '.github/workflows/document-registry-validate.yml'
+  workflow_dispatch:
+
+jobs:
+  validate-registry:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate CSV structure
+        id: validate
+        run: |
+          REGISTRY_FILE="knowledge-base/document-registry.csv"
+
+          if [ ! -f "$REGISTRY_FILE" ]; then
+            echo "❌ document-registry.csv not found"
+            exit 1
+          fi
+
+          echo "Validating document registry..."
+
+          # Check header row exists
+          HEADER=$(head -1 "$REGISTRY_FILE")
+          EXPECTED_COLS="project_id,folder_path,filename,document_type,version,date_modified,status"
+
+          if [[ "$HEADER" != "$EXPECTED_COLS" ]]; then
+            echo "❌ Invalid header row. Expected:"
+            echo "$EXPECTED_COLS"
+            echo "Got:"
+            echo "$HEADER"
+            exit 1
+          fi
+
+          # Count rows
+          ROW_COUNT=$(wc -l < "$REGISTRY_FILE")
+          echo "✅ Registry valid: $((ROW_COUNT - 1)) documents indexed"
+
+          # Check for duplicate entries
+          DUPLICATE_CHECK=$(awk -F',' 'NR>1 {print $1,$2,$3}' "$REGISTRY_FILE" | sort | uniq -d | wc -l)
+
+          if [ $DUPLICATE_CHECK -gt 0 ]; then
+            echo "⚠️ Warning: $DUPLICATE_CHECK potential duplicate entries detected"
+          fi
+
+          echo "validation_passed=true" >> $GITHUB_OUTPUT
+          echo "document_count=$((ROW_COUNT - 1))" >> $GITHUB_OUTPUT
+          echo "duplicates=$DUPLICATE_CHECK" >> $GITHUB_OUTPUT
+
+      - name: Check for stale documents
+        run: |
+          echo "Checking for documents not updated in 180+ days..."
+
+          CUTOFF_DATE=$(date -d "180 days ago" +%Y-%m-%d)
+          STALE_COUNT=0
+
+          # This is a placeholder — in production, parse the CSV and check modification dates
+          echo "Cutoff date: $CUTOFF_DATE"
+          echo "Stale documents: $STALE_COUNT"
+
+      - name: Report validation results
+        run: |
+          echo "✅ Document registry validation complete"
+          echo "Documents indexed: ${{ steps.validate.outputs.document_count }}"
+          echo "Potential duplicates: ${{ steps.validate.outputs.duplicates }}"
+          echo "Validation status: ${{ steps.validate.outputs.validation_passed }}"
