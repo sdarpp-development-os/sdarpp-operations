@@ -41,7 +41,17 @@ Compliance matrices and status tracking:
 ### projects/
 Per-project governance and coordination:
 - Each active project has a sub-folder with governance, planning, SDA, and AI output folders
-- README.md in each project links to the OneDrive folder for detailed documents
+- README.md in each project links to the GitHub project repo and OneDrive folder for detailed documents
+
+---
+
+## 📊 Active Projects
+
+| Project ID | Location | Status | Repository | Director |
+|-----------|----------|--------|-----------|----------|
+| **VIC-SDA-WODONGA-2025** | Wodonga VIC | Stage 3 (Design & Cost Alignment) | [project_day_st_wodonga](https://github.com/sdarpp-development-os/project_day_st_wodonga) | Sugi Gunamijaya |
+
+**Project Details:** See [`projects/VIC-SDA-WODONGA-2025/README.md`](projects/VIC-SDA-WODONGA-2025/README.md)
 
 ---
 
