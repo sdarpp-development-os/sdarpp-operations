@@ -87,5 +87,27 @@ This matrix is the source of truth for all SDA Design Standard compliance audits
 
 ---
 
+## Project Baselines
+
+### VIC-SDA-WODONGA-2025 (Day Street, Wodonga)
+
+**Category:** HPS (High Physical Support) — Target Category  
+**Assessment Date:** 2026-04-06  
+**Status:** ⭕ Pending full accredited assessor audit
+
+**Initial Baseline Assessment:**
+- **Step-free Access:** ⚠️ Requires on-site validation
+- **Communal Kitchen:** ❌ Single shared kitchen for 20 studios; does not meet HPS standard
+- **Overall Compliance:** ⭕ No evidence existing structure meets HPS baseline out-of-the-box; capital modification expected
+
+**Next Steps:**
+1. Engage accredited NDIS SDA Assessor (LOI: 01 May 2026)
+2. Complete full HPS compliance audit (target: 31 May 2026)
+3. Update this matrix with project-specific status post-audit
+
+**Reference:** [compliance/NDIS_SDA_STANDARDS.md](https://github.com/sdarpp-development-os/project_day_st_wodonga/blob/main/compliance/NDIS_SDA_STANDARDS.md)
+
+---
+
 **Managed By:** SDARPP Compliance Function  
 **Review Frequency:** Quarterly (or per NDIS Commission updates)

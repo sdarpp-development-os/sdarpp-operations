@@ -9,3 +9,13 @@ SYS,templates/agent-prompts,feasibility-analysis-prompt.md,template,1.0,2026-04-
 SYS,templates/governance,risk-register-template.md,template,1.0,2026-04-05,current
 SYS,templates/governance,decision-log-template.md,template,1.0,2026-04-05,current
 SYS,compliance-register,ndis-sda-compliance-matrix.md,compliance,1.0,2026-04-05,current
+VIC-SDA-WODONGA-2025,projects/VIC-SDA-WODONGA-2025,README.md,project,1.0,2026-04-06,current
+VIC-SDA-WODONGA-2025,https://github.com/sdarpp-development-os/project_day_st_wodonga,governance/MEETING_NOTE_TEMPLATE.md,governance,1.0,2026-04-06,current
+VIC-SDA-WODONGA-2025,https://github.com/sdarpp-development-os/project_day_st_wodonga,governance/FOLLOW_UP_REGISTER.md,governance,1.0,2026-04-06,current
+VIC-SDA-WODONGA-2025,https://github.com/sdarpp-development-os/project_day_st_wodonga,governance/decision_log.md,governance,1.0,2026-04-06,current
+VIC-SDA-WODONGA-2025,https://github.com/sdarpp-development-os/project_day_st_wodonga,governance/risk_register.md,governance,1.0,2026-04-06,current
+VIC-SDA-WODONGA-2025,https://github.com/sdarpp-development-os/project_day_st_wodonga,feasibility/FEASIBILITY_ANALYSIS.md,feasibility,1.0,2026-04-06,current
+VIC-SDA-WODONGA-2025,https://github.com/sdarpp-development-os/project_day_st_wodonga,feasibility/PLANNING_ADVICE_ANALYSIS.md,feasibility,1.0,2026-04-06,current
+VIC-SDA-WODONGA-2025,https://github.com/sdarpp-development-os/project_day_st_wodonga,pm/PROJECT_DELIVERY_SCHEDULE.md,pm,1.0,2026-04-06,current
+VIC-SDA-WODONGA-2025,https://github.com/sdarpp-development-os/project_day_st_wodonga,pm/PROJECT_BRIEF.md,pm,1.0,2026-04-06,current
+VIC-SDA-WODONGA-2025,https://github.com/sdarpp-development-os/project_day_st_wodonga,compliance/NDIS_SDA_STANDARDS.md,compliance,1.0,2026-04-06,current
