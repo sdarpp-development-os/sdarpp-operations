@@ -1,0 +1,45 @@
+name: Sync to GitLab
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '.github/workflows/sync-to-gitlab.yml'
+      - '.gitlab-ci.yml'
+      - 'GITLAB_SETUP_GUIDE.md'
+
+jobs:
+  sync-to-gitlab:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout GitHub repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config --global user.email "automation@sdarpp.com"
+          git config --global user.name "SDARPP Automation"
+
+      - name: Add GitLab remote
+        run: |
+          git remote add gitlab https://oauth2:${{ secrets.GITLAB_TOKEN }}@gitlab.com/sdarpp/sdarpp-operations.git
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+
+      - name: Fetch GitLab remote
+        run: git fetch gitlab main || echo "GitLab project may not exist yet"
+        continue-on-error: true
+
+      - name: Push to GitLab
+        run: git push gitlab main --force
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+
+      - name: Verify sync
+        run: |
+          echo "✅ GitHub → GitLab sync completed"
+          echo "GitHub SHA: $(git rev-parse HEAD)"
+          echo "Synced to: https://gitlab.com/sdarpp/sdarpp-operations"
