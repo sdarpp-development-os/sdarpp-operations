@@ -1,0 +1,125 @@
+name: C-Suite Board Pack
+
+on:
+  # ── Monthly Board Pack (first Monday of month, 6am AEST = Sun 8pm UTC) ──
+  schedule:
+    - cron: '0 20 1-7 * 0'
+
+  # ── Weekly C-Suite Pulse (every Monday 6am AEST) ──
+  # Uncomment to enable weekly pulse:
+  # schedule:
+  #   - cron: '0 20 * * 0'
+
+  # ── Emergency: triggered by CEO Alignment RED/TERMINATE ──
+  workflow_run:
+    workflows: ["CEO Alignment Monitor"]
+    types: [completed]
+
+  # ── Manual trigger: full Board Pack or single C-Suite role ──
+  workflow_dispatch:
+    inputs:
+      project_id:
+        description: 'Project ID (blank = all projects)'
+        required: false
+        type: string
+      role:
+        description: 'Role to run (CFO/CPO/CDO/CCO/CRO/CESO/ALL/BOARD)'
+        required: false
+        default: 'ALL'
+        type: choice
+        options:
+          - ALL
+          - BOARD
+          - CFO
+          - CPO
+          - CDO
+          - CCO
+          - CRO
+          - CESO
+          - BOARD_CHAIR
+
+jobs:
+  detect-projects:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.detect.outputs.matrix }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect projects
+        id: detect
+        run: |
+          python3 - <<'PYEOF'
+          import os, json
+          from pathlib import Path
+
+          specific = "${{ github.event.inputs.project_id }}".strip()
+
+          if specific:
+              projects = [specific]
+          else:
+              pd = Path("projects")
+              projects = [
+                  p.name for p in sorted(pd.iterdir())
+                  if p.is_dir() and (p / "wiki").exists()
+                  and len(list((p / "wiki").glob("*.md"))) > 1
+              ] if pd.exists() else []
+
+          print(f"Board Pack for: {projects}")
+          matrix = {"project_id": projects} if projects else {"project_id": ["none"]}
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"matrix={json.dumps(matrix)}\n")
+          PYEOF
+
+  run-csuite:
+    needs: detect-projects
+    if: needs.detect-projects.outputs.matrix != '{"project_id": ["none"]}'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect-projects.outputs.matrix) }}
+
+    permissions:
+      contents: write
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install anthropic PyGithub
+
+      - name: Run C-Suite Briefing
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ROLE="${{ github.event.inputs.role || 'ALL' }}"
+          echo "{\"project_id\": \"${{ matrix.project_id }}\", \"role\": \"$ROLE\"}" | \
+            python3 automation/scripts/board/csuite_executor.py
+
+      - name: Commit Board Pack
+        run: |
+          git config user.name "SDARPP Board"
+          git config user.email "board@sdarpp.com.au"
+          git pull --rebase origin main
+          git add projects/${{ matrix.project_id }}/wiki/csuite-*.md
+          git add projects/${{ matrix.project_id }}/wiki/board-pack_*.md
+          git diff --staged --quiet || \
+            git commit -m "Board Pack: ${{ matrix.project_id }} — $(date '+%d/%m/%Y') [skip ci]"
+          git push
+
+      - name: Upload Board Pack artifact
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: board-pack-${{ matrix.project_id }}-${{ github.run_id }}
+          path: projects/${{ matrix.project_id }}/wiki/board-pack_*.md
+          retention-days: 365
