@@ -1,0 +1,366 @@
+name: New Project Intelligence Pipeline
+
+# ─────────────────────────────────────────────────────────────
+# Triggered when a new project is created.
+# Runs the full 4-stage intelligence pipeline:
+#   Stage 1A: DIBA — Development Intelligence Briefing
+#   Stage 1B: Site Investigator — Planning constraints + First Nations
+#   Stage 1C: Design PoC — 4 scenarios (AS IS / Potential / Max / Special Use)
+#   Stage 1D: Commit all outputs to project wiki
+# ─────────────────────────────────────────────────────────────
+
+on:
+  # Trigger on issue with new-project label
+  issues:
+    types: [opened, labeled]
+
+  # Manual trigger with full project inputs
+  workflow_dispatch:
+    inputs:
+      project_id:
+        description: 'Project ID (e.g. VIC-HUB-BENDIGO-2026)'
+        required: true
+        type: string
+      project_name:
+        description: 'Project Name (e.g. Mitchell Street, Bendigo)'
+        required: true
+        type: string
+      address:
+        description: 'Site Address'
+        required: true
+        type: string
+      state:
+        description: 'State'
+        required: true
+        type: choice
+        options: [VIC, NSW, WA, SA, QLD, TAS, NT, ACT]
+      lga:
+        description: 'Local Government Area'
+        required: true
+        type: string
+      land_area:
+        description: 'Land Area (sqm)'
+        required: false
+        default: 'TBD'
+        type: string
+      zoning:
+        description: 'Current Zoning'
+        required: false
+        default: 'TBD'
+        type: string
+      proposed_use:
+        description: 'Proposed Use'
+        required: false
+        default: 'Mixed-Use Healthcare Hub'
+        type: string
+      current_use:
+        description: 'Current Site Use'
+        required: false
+        default: 'TBD'
+        type: string
+      site_description:
+        description: 'Site Context / Description'
+        required: false
+        type: string
+
+jobs:
+  # ─── Guard: only run for new-project labeled issues ───────
+  check-trigger:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+      project_json: ${{ steps.check.outputs.project_json }}
+    steps:
+      - name: Determine if this should run
+        id: check
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+            PROJECT_JSON=$(cat <<'EOF'
+          {
+            "project_id": "${{ github.event.inputs.project_id }}",
+            "project_name": "${{ github.event.inputs.project_name }}",
+            "address": "${{ github.event.inputs.address }}",
+            "state": "${{ github.event.inputs.state }}",
+            "lga": "${{ github.event.inputs.lga }}",
+            "land_area": "${{ github.event.inputs.land_area }}",
+            "zoning": "${{ github.event.inputs.zoning }}",
+            "proposed_use": "${{ github.event.inputs.proposed_use }}",
+            "current_use": "${{ github.event.inputs.current_use }}",
+            "site_description": "${{ github.event.inputs.site_description }}"
+          }
+          EOF
+          )
+            echo "project_json=$PROJECT_JSON" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" == "issues" ]; then
+            if echo '${{ toJSON(github.event.issue.labels.*.name) }}' | grep -q "new-project"; then
+              echo "should_run=true" >> $GITHUB_OUTPUT
+              echo "project_json=FROM_ISSUE" >> $GITHUB_OUTPUT
+            else
+              echo "should_run=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+  # ─── Stage 0: Create project folder structure ─────────────
+  setup-project:
+    needs: check-trigger
+    if: needs.check-trigger.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+    outputs:
+      project_id: ${{ steps.setup.outputs.project_id }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install anthropic PyGithub pyyaml
+
+      - name: Parse project data from issue
+        if: github.event_name == 'issues'
+        id: parse-issue
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          python3 - <<'PYEOF'
+          import os, json, re
+          body = os.getenv('ISSUE_BODY', '')
+          m = re.search(r'```json\n(.*?)\n```', body, re.DOTALL)
+          if m:
+              data = json.loads(m.group(1))
+              with open('/tmp/project_input.json', 'w') as f:
+                  json.dump(data, f, indent=2)
+              print(f"Parsed project: {data.get('project_name')}")
+          else:
+              print("No JSON found in issue body — aborting")
+              exit(1)
+          PYEOF
+
+      - name: Build project input from workflow_dispatch
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          cat > /tmp/project_input.json << 'EOF'
+          ${{ needs.check-trigger.outputs.project_json }}
+          EOF
+
+      - name: Generate project structure
+        id: setup
+        run: |
+          PROJECT_ID=$(python3 -c "import json; d=json.load(open('/tmp/project_input.json')); print(d.get('project_id','unknown'))")
+          echo "project_id=$PROJECT_ID" >> $GITHUB_OUTPUT
+
+          python3 automation/scripts/new_project_generator.py \
+            --project-id "$(python3 -c "import json; d=json.load(open('/tmp/project_input.json')); print(d.get('project_id','unknown'))")" \
+            --name "$(python3 -c "import json; d=json.load(open('/tmp/project_input.json')); print(d.get('project_name','Unknown'))")" \
+            --address "$(python3 -c "import json; d=json.load(open('/tmp/project_input.json')); print(d.get('address', d.get('site_address','Unknown')))")" \
+            --state "$(python3 -c "import json; d=json.load(open('/tmp/project_input.json')); print(d.get('state','VIC'))")" \
+            --lga "$(python3 -c "import json; d=json.load(open('/tmp/project_input.json')); print(d.get('lga','Unknown'))")" \
+            --land-area "$(python3 -c "import json; d=json.load(open('/tmp/project_input.json')); print(d.get('land_area','TBD'))")" \
+            --zoning "$(python3 -c "import json; d=json.load(open('/tmp/project_input.json')); print(d.get('zoning','TBD'))")" \
+            --proposed-use "$(python3 -c "import json; d=json.load(open('/tmp/project_input.json')); print(d.get('proposed_use','Mixed-Use Healthcare Hub'))")"
+
+      - name: Commit project structure
+        run: |
+          git config user.name "SDARPP Project Generator"
+          git config user.email "agents@sdarpp.com.au"
+          git add projects/
+          git diff --staged --quiet || git commit -m "New Project: ${{ steps.setup.outputs.project_id }} — structure created [skip ci]"
+          git push
+
+      - name: Comment on issue
+        if: github.event_name == 'issues'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🚀 Project Structure Created
+
+**Project ID:** \`${{ steps.setup.outputs.project_id }}\`
+
+✅ Wiki created (state, decisions, risks, budget, schedule, stakeholders)
+✅ Agent jobs queued
+
+**Pipeline starting now:**
+1. 🔄 DIBA — Development Intelligence Briefing
+2. ⏳ Site Investigator — Planning constraints
+3. ⏳ Design PoC — 4 scenarios
+4. ⏳ All outputs committed to \`projects/${{ steps.setup.outputs.project_id }}/wiki/\`
+
+*Estimated completion: 15-20 minutes*`
+            });
+
+  # ─── Stage 1A: DIBA Intelligence Briefing ──────────────────
+  diba-briefing:
+    needs: setup-project
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install anthropic PyGithub pyyaml
+
+      - name: Restore project input
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          cat > /tmp/project_input.json << 'EOF'
+          ${{ needs.check-trigger.outputs.project_json }}
+          EOF
+
+      - name: Run DIBA
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          python3 automation/scripts/diba_executor.py \
+            --project-file /tmp/project_input.json
+
+      - name: Commit DIBA briefing
+        run: |
+          git config user.name "DIBA Agent"
+          git config user.email "agents@sdarpp.com.au"
+          git pull --rebase origin main
+          git add projects/*/wiki/*diba*.md
+          git diff --staged --quiet || git commit -m "DIBA: Intelligence briefing — ${{ needs.setup-project.outputs.project_id }} [skip ci]"
+          git push
+
+  # ─── Stage 1B: Site Investigator ───────────────────────────
+  site-investigation:
+    needs: [setup-project, diba-briefing]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install anthropic PyGithub pyyaml
+
+      - name: Restore project input
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          cat > /tmp/project_input.json << 'EOF'
+          ${{ needs.check-trigger.outputs.project_json }}
+          EOF
+
+      - name: Run Site Investigator
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          cat /tmp/project_input.json | python3 automation/scripts/site_investigator_executor.py
+
+      - name: Commit site investigation
+        run: |
+          git config user.name "Site Investigator Agent"
+          git config user.email "agents@sdarpp.com.au"
+          git pull --rebase origin main
+          git add projects/*/wiki/site-investigation*.md
+          git diff --staged --quiet || git commit -m "Site Investigation: ${{ needs.setup-project.outputs.project_id }} [skip ci]"
+          git push
+
+  # ─── Stage 1C: Design PoC ──────────────────────────────────
+  design-poc:
+    needs: [setup-project, site-investigation]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install anthropic PyGithub pyyaml
+
+      - name: Restore project input
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          cat > /tmp/project_input.json << 'EOF'
+          ${{ needs.check-trigger.outputs.project_json }}
+          EOF
+
+      - name: Run Design PoC (4 scenarios)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          cat /tmp/project_input.json | python3 automation/scripts/design_poc_executor.py
+
+      - name: Commit Design PoC
+        run: |
+          git config user.name "Design PoC Agent"
+          git config user.email "agents@sdarpp.com.au"
+          git pull --rebase origin main
+          git add projects/*/wiki/design-poc*.md
+          git diff --staged --quiet || git commit -m "Design PoC: 4 scenarios — ${{ needs.setup-project.outputs.project_id }} [skip ci]"
+          git push
+
+      - name: Upload all outputs as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: project-intelligence-${{ needs.setup-project.outputs.project_id }}
+          path: projects/${{ needs.setup-project.outputs.project_id }}/wiki/
+          retention-days: 365
+
+      - name: Final comment on issue
+        if: github.event_name == 'issues'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ✅ New Project Intelligence Pipeline Complete
+
+**Project:** \`${{ needs.setup-project.outputs.project_id }}\`
+
+All 3 intelligence reports generated and committed:
+
+| Report | File | Status |
+|--------|------|--------|
+| DIBA Briefing | \`wiki/*-diba-briefing-*.md\` | ✅ Done |
+| Site Investigation | \`wiki/site-investigation-*.md\` | ✅ Done |
+| Design PoC (4 Scenarios) | \`wiki/design-poc-*.md\` | ✅ Done |
+
+**View reports:** \`projects/${{ needs.setup-project.outputs.project_id }}/wiki/\`
+
+**Next Step:** Project Director reviews Design PoC and selects preferred scenario for Stage 2 design development.
+
+*Pipeline completed by SDARPP Agent Team*`
+            });
+
+          github.rest.issues.update({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            state: 'closed',
+            labels: ['new-project', 'intelligence-complete']
+          });
