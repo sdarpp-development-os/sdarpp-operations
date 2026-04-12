@@ -1,0 +1,123 @@
+name: CEO Alignment Monitor
+
+on:
+  # ── Run on every wiki document change ──────────────────────
+  push:
+    paths:
+      - 'projects/*/wiki/project_state.md'
+      - 'projects/*/wiki/budget.md'
+      - 'projects/*/wiki/risks.md'
+      - 'projects/*/wiki/decisions.md'
+      - 'projects/*/ceo-baseline.json'
+
+  # ── Weekly scheduled check (every Monday 7am AEST = Sunday 9pm UTC) ──
+  schedule:
+    - cron: '0 21 * * 0'
+
+  # ── Manual trigger ────────────────────────────────────────
+  workflow_dispatch:
+    inputs:
+      project_id:
+        description: 'Project ID (leave blank to check all)'
+        required: false
+        type: string
+
+jobs:
+  detect-projects:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.detect.outputs.matrix }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect projects to check
+        id: detect
+        run: |
+          python3 - <<'PYEOF'
+          import os, json
+          from pathlib import Path
+
+          # If manual trigger with specific project_id
+          specific = "${{ github.event.inputs.project_id }}".strip()
+
+          if specific:
+              projects = [specific]
+          else:
+              # Find all projects with a wiki directory and baseline
+              projects_dir = Path("projects")
+              projects = []
+              if projects_dir.exists():
+                  for p in sorted(projects_dir.iterdir()):
+                      if p.is_dir() and (p / "wiki").exists():
+                          # Skip projects that only have placeholder files
+                          wiki_files = list((p / "wiki").glob("*.md"))
+                          if len(wiki_files) > 1:
+                              projects.append(p.name)
+
+          print(f"Projects to check: {projects}")
+          matrix = {"project_id": projects}
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"matrix={json.dumps(matrix)}\n")
+          PYEOF
+
+  run-alignment-check:
+    needs: detect-projects
+    if: needs.detect-projects.outputs.matrix != '{"project_id": []}'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect-projects.outputs.matrix) }}
+
+    permissions:
+      contents: write
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install anthropic PyGithub
+
+      - name: Run CEO Alignment Monitor
+        id: alignment
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo '{"project_id": "${{ matrix.project_id }}"}' | \
+            python3 automation/scripts/ceo_alignment_monitor.py
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Commit alignment report
+        run: |
+          git config user.name "CEO Alignment Monitor"
+          git config user.email "agents@sdarpp.com.au"
+          git pull --rebase origin main
+          git add projects/${{ matrix.project_id }}/wiki/ceo-alignment_*.md
+          git diff --staged --quiet || \
+            git commit -m "CEO Alignment: ${{ matrix.project_id }} — $(date '+%d/%m/%Y') [skip ci]"
+          git push
+
+      - name: Halt if TERMINATE signal
+        if: steps.alignment.outputs.exit_code == '2'
+        run: |
+          echo "🛑 TERMINATE signal received for ${{ matrix.project_id }}"
+          echo "All downstream agent jobs for this project should be stopped"
+          echo "Board review required before resuming"
+          exit 1
+
+      - name: Upload alignment report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: ceo-alignment-${{ matrix.project_id }}-${{ github.run_id }}
+          path: projects/${{ matrix.project_id }}/wiki/ceo-alignment_*.md
+          retention-days: 365

@@ -434,6 +434,42 @@ def main():
     write_file(jobs_dir / "01_diba_briefing.md",    diba_issue_body(ctx))
     write_file(jobs_dir / "02_site_investigation.md", agent_job_site_investigation(ctx))
 
+    # ── Create locked CEO Baseline ────────────────────────────
+    import subprocess, sys as _sys
+    baseline_data = {
+        "project_id":            args.project_id,
+        "project_name":          args.name,
+        "address":               args.address,
+        "state":                 args.state,
+        "lga":                   args.lga,
+        # SDARPP standard targets — adjust after DIBA if needed
+        "irr_target":            14.5,
+        "dscr_target":           1.27,
+        "dev_margin_target":     17.5,
+        "revenue_streams":       4,
+        "tdc_estimate":          0,        # updated after cost plan
+        "annual_revenue_target": 0,        # updated after DIBA
+        "gfa_target":            0,        # updated after Design PoC
+        "sda_units":             4,
+        "vmo_suites":            16,
+        "cssd_required":         True,
+        "medical_hub_required":  True,
+        "notes":                 f"CEO Baseline created at project inception — {date_str}"
+    }
+    try:
+        create_baseline_script = Path(__file__).parent / "create_ceo_baseline.py"
+        result = subprocess.run(
+            [_sys.executable, str(create_baseline_script)],
+            input=json.dumps(baseline_data),
+            capture_output=True, text=True
+        )
+        if result.returncode == 0:
+            print(f"  ✅ CEO Baseline locked for {args.project_id}")
+        else:
+            print(f"  ⚠️  CEO Baseline creation warning: {result.stderr}")
+    except Exception as e:
+        print(f"  ⚠️  Could not auto-create baseline: {e} — run create_ceo_baseline.py manually")
+
     # ── Output JSON for next steps ───────────────────────────
     output = {
         "status": "created",
